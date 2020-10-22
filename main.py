@@ -10,10 +10,14 @@
 from selenium import webdriver
 import time
 import random
+import threading
 
 Number = ''   #登录的账号
 Password = '' #登录的密码
 Course = ''   #要刷的课程名
+start_video = 1 #从第几个视频播放（注意：是第几个视频，不是第几个课时）
+end_video = 10 #在第几个视频结束播放（注意：是第几个视频，不是第几个课时，同时该视频会播放）
+count = 0 #记录当前在第几个视频
 
 class Object:
 
@@ -58,9 +62,9 @@ class Object:
         
     #寻找视频      
     def study(self):
-        input = self.driver.find_element_by_xpath('/html/body/div[5]/div[1]/div[2]/div[3]/div[1]/div[1]/h3/span[3]/a')#定位课程中的第一个课时
+        input = self.driver.find_elements_by_xpath('/html/body/div[5]/div[1]/div[2]/div[3]/div[1]/div[1]/h3/span[3]/a')#定位课程中的第一个课时
         input.click()#模拟点击该课时
-        for i in range(10):#只放前十个课时
+        while True:
             time.sleep(random.randint(1,3))#线程挂起random.randint(1,3)秒
             try:
                 self.driver.switch_to.frame(self.driver.find_element_by_id('iframe'))#切换frame
@@ -74,9 +78,12 @@ class Object:
                 break
             try:
                 for input in inputs:#对找到的frame进行遍历，并对其中的视频进行播放
+                    if count >= end_video:
+                        return
                     time.sleep(3)#线程挂起3秒
                     self.play_video(input)#播放当前frame中的视频
                     self.driver.switch_to.parent_frame()#切换frame
+                    print('count = %d' % count)
                 self.driver.switch_to.default_content()#返回最外层的文档
                 input = self.driver.find_element_by_xpath('//*[@id="mainid"]/div[1]/div[2]')#寻找下一页这个按钮的标签
                 time.sleep(3)#线程挂起3秒
@@ -96,6 +103,10 @@ class Object:
             inputs = self.driver.find_element_by_id('reader')#寻找当前frame中的视频
         except:
             print('未找到视频')
+            return
+        global count
+        count = count + 1
+        if count < start_video:
             return
         inputs.click()#模拟点击该视频，即播放该视频
         time.sleep(2)#线程挂起2秒
@@ -123,11 +134,31 @@ class Object:
             print('播放时长没找到')
             return
 
+    #检测是否手动关闭了整个窗口函数
+    def exit(self):
+        while True:
+            try:
+                self.driver.window_handles
+                time.sleep(3)
+            except:
+                print('检测线程退出')
+                return
+    
     #析构函数
     def __del__(self):
+        print('Chromedriver进程正在关闭')
         self.driver.quit() #关闭chromedriver进程   
+        print('Chromedriver进程已经关闭')
         
 if __name__ == "__main__":
     a = Object('http://i.chaoxing.com')#创建Object对象
-    a.login()#运行本刷课程序
-    del a#释放对象（不使用这一句，析构函数会出错，原因网上没有说，比较玄学）
+    #使用多线程进行刷课和检测是不是关闭了窗口，表示现在不想刷课了
+    t1 = threading.Thread(target = a.login)
+    t2 = threading.Thread(target = a.exit)
+    try:
+        t1.start()
+    except:
+        print('结束刷课')
+    t2.start()
+    t2.join()
+    del a
